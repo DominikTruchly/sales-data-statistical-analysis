@@ -1,0 +1,10 @@
+Export.html
+*.tex
+*.log
+*.knit.md
+*.utf8.md
+*_cache/
+*_files/
+.Rhistory
+.RData
+.Rproj.user/

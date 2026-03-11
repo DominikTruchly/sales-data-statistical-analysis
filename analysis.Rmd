@@ -1,0 +1,293 @@
+---
+title: "R statistical analysis"
+author: "Dominik Truchly"
+date: "2024-12-17"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("Hmisc")		  #	rcorr
+library("ppcor")		  #	pcor
+library("GGally")     # ggpairs
+library("ggcorrplot") # ggcorrplot
+library("gridExtra")  # grid.arrange
+library("ggplot2")
+library("agricolae")
+library("car")
+library("nortest")
+
+library(ggcorrplot)
+```
+
+
+# TASK 1
+```{r}
+# Load data
+ChildCarSeats <- read.csv("data/ChildCarSeats.csv")
+
+head(dt)
+
+```
+```{r}
+# Oneway ANOVA
+anova_model <- aov(Sales ~ Advert, data = ChildCarSeats)
+
+summary(anova_model)
+cat("P-value is 2e-16, which is very small, so we reject H0.")
+cat("Conclusion: advertisements have a statistically significant effect on sales.")
+```
+
+```{r}
+leveneTest(Sales ~ Advert, data = ChildCarSeats)
+cat("P-value is 0.44 (> 0.05), variances are homogeneous (ANOVA assumption satisfied).")
+```
+```{r}
+residuals <- residuals(anova_model)
+shapiro.test(residuals)
+cat("P-value is 0.37 (> 0.05), residuals follow a normal distribution (ANOVA assumption satisfied).")
+
+```
+```{r}
+# Boxplot for visualization
+ggplot(ChildCarSeats, aes(x = Advert, y = Sales, fill = Advert)) +
+  geom_boxplot() +
+  labs(title = "Sales by Advertisement Type", y = "Sales", x = "Advertisement Type") +
+  theme_minimal()
+```
+```{r}
+# Tukey's HSD test
+tukey_results <- TukeyHSD(anova_model)
+print(tukey_results)
+cat("
+Extra advertisement leads to significantly higher sales than Common (mean difference: 290.74).
+No advertisement results in significantly lower sales than Common (−178.37).
+No advertisement yields the lowest sales, with a large gap compared to Extra (−469.11).")
+
+```
+# TASK 2
+```{r}
+# Scatterplot matrix for Sales, Price, CompPrice
+ggpairs(ChildCarSeats[, c("Sales", "Price", "CompPrice")],
+        title = "Scatterplot Matrix for Sales, Price, and CompPrice",
+        aes(color = "blue", alpha = 0.5))
+
+```
+
+```{r}
+# Calculate Pearson correlation matrix
+cor_matrix <- cor(ChildCarSeats[, c("Sales", "Price", "CompPrice")], method = "pearson")
+print(cor_matrix)
+```
+```{r}
+# Plot correlation matrix
+plot11 <- ggcorrplot(cor_matrix, 
+                     title = "Pearson's Correlations", 
+                     lab = TRUE, 
+                     type = "full", 
+                     method = "square", 
+                     outline.color = "white", 
+                     show.legend = FALSE)
+print(plot11)
+# Values closer to 1 indicate a strong positive relationship, -1 a strong negative one, and 0 no relationship
+```
+
+
+```{r}
+# Calculate variance-covariance matrix
+var_cov_matrix <- cov(ChildCarSeats[, c("Sales", "Price", "CompPrice")])
+print(var_cov_matrix)
+cat("Covariance indicates that Price and Sales are inversely proportional, while Sales and CompPrice have a weak positive relationship.")
+```
+
+```{r}
+# Calculate sample standard deviations
+sample_sd <- sqrt(diag(var_cov_matrix))
+names(sample_sd) <- c("Sales", "Price", "CompPrice")
+print(sample_sd)
+cat("Sales shows the highest variability, while Price and CompPrice have low variability.")
+```
+
+# TASK 3
+```{r}
+ChildCarSeats <- read.csv("data/ChildCarSeats.csv")
+
+head(ChildCarSeats)
+```
+```{r}
+# Contingency table
+table_expensive_city <- table(ChildCarSeats$Expensive, ChildCarSeats$City)
+print(table_expensive_city)
+```
+
+```{r}
+# Calculate odds ratio
+odds_ratio <- (table_expensive_city[2, 2] / table_expensive_city[1, 2]) / 
+              (table_expensive_city[2, 1] / table_expensive_city[1, 1])
+print(paste("odds ratio: ", odds_ratio))
+```
+
+```{r}
+# Calculate the standard error for the log(odds ratio)
+se_log_or <- sqrt(1/table_expensive_city[1, 1] + 1/table_expensive_city[2, 1] + 
+                  1/table_expensive_city[1, 2] + 1/table_expensive_city[2, 2])
+
+# Calculate the log of the odds ratio
+log_or <- log(odds_ratio)
+conf_int_log_or <- c(log_or - 1.96 * se_log_or, log_or + 1.96 * se_log_or)
+conf_int_or <- exp(conf_int_log_or)
+print(paste("95% Confidence Interval odds ratio: [", conf_int_or[1], ", ", conf_int_or[2], "]", sep = ""))
+```
+```{r}
+cat("The CI [0.6379, 1.5069] spans 1, meaning there is no statistically significant association between City and Expensive.")
+```
+
+
+```{r}
+# Mosaic plot for Expensive vs City
+mosaicplot(table_expensive_city, main = "Mosaic Plot Expensive vs City", 
+           color = c("lightblue", "lightgreen"), 
+           xlab = "City", ylab = "Expensive")
+```
+
+# TASK 4
+```{r}
+ChildCarSeats <- read.csv("data/ChildCarSeats.csv")
+
+# Build linear regression model
+model <- lm(Sales ~ Price + City, data = ChildCarSeats)
+summary(model)
+```
+```{r}
+cat("
+The model shows that Price has a significant negative effect on Sales (as price increases, sales decrease).
+City does not have a significant effect on Sales (high p-value: 0.903).
+The model is statistically significant but explains only ~19.4% of the variability in sales (R-squared).")
+```
+
+```{r}
+# Plot the model
+ggplot(ChildCarSeats, aes(x = Price, y = Sales, color = City)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  labs(title = "Regression of Sales on Price and City",
+       x = "Price", y = "Sales") +
+  theme_minimal()
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(model) 
+```
+```{r}
+cat("
+Residuals vs Fitted: ideally should show a random scatter (residuals not systematically related to fitted values).
+
+QQ Residuals: if residuals are normally distributed, points should roughly follow the diagonal line.
+
+Scale-Location: random scatter with no clear pattern (equal variance of residuals across all levels of predictors).
+
+Residuals vs Leverage: highlights points that are outliers or have high leverage."
+)
+```
+
+```{r}
+# Coefficient of multiple correlation between the response and predictors
+# Value taken from model summary
+r_squared <- summary(model)$r.squared
+cat("R-squared: ", r_squared, "\n")
+```
+```{r}
+# value of Sales for Price = 150 and City = "Yes"
+new_data <- data.frame(Price = 150, City = "Yes")
+pred_sales <- predict(model, new_data, interval = "confidence", level = 0.95)
+cat("Predicted Sales with 95% confidence interval: \n")
+print(pred_sales)
+```
+```{r}
+# Sales with 95% prediction interval for Price = 150 and City = "Yes"
+pred_sales_with_PI <- predict(model, new_data, interval = "prediction", level = 0.95)
+cat("Predicted Sales with 95% prediction interval: \n")
+print(pred_sales_with_PI)
+```
+```{r}
+cat("The significant Pearson correlation between Sales and Price in Task 2 (-0.4449507) corresponds to the negative regression coefficient for Price, which has a p-value < 2e-16.")
+```
+# TASK 5
+```{r}
+ChildCarSeats <- read.csv("data/ChildCarSeats.csv")
+
+# Build logistic regression model
+ChildCarSeats$Expensive <- ifelse(ChildCarSeats$Expensive == "Yes", 1, 0)
+
+logit_model <- glm(Expensive ~ Sales, data = ChildCarSeats, family = "binomial")
+
+summary(logit_model)
+```
+```{r}
+cat("The model indicates that Sales is significantly associated with the probability of an item being labelled Expensive (p-value < 2e-16). The negative coefficient means that as sales increase, the probability of the car seat being expensive decreases.")
+```
+
+```{r}
+# Plot logistic regression curve
+sales_range <- seq(min(ChildCarSeats$Sales), max(ChildCarSeats$Sales), length.out = 100)
+
+predicted_probabilities <- predict(logit_model, newdata = data.frame(Sales = sales_range), type = "response")
+
+plot_data <- data.frame(Sales = sales_range, Predicted_Prob = predicted_probabilities)
+ggplot(ChildCarSeats, aes(x = Sales, y = Expensive)) +
+  geom_point(alpha = 0.5) +
+  geom_line(data = plot_data, aes(x = Sales, y = Predicted_Prob), color = "blue") +
+  labs(x = "Sales", y = "Probability of Expensive = Yes", title = "Logistic Regression: Sales vs. Probability of Expensive") +
+  theme_minimal()
+```
+
+```{r}
+# Calculate probability of Expensive == "Yes" when Sales = 1000
+sales_value <- 1000
+
+coefficients <- coef(logit_model)
+
+log_odds <- coefficients[1] + coefficients[2] * sales_value
+
+probability <- 1 / (1 + exp(-log_odds))
+
+se <- sqrt(diag(vcov(logit_model)))
+lower_log_odds <- log_odds - 1.96 * se[2] * sales_value
+upper_log_odds <- log_odds + 1.96 * se[2] * sales_value
+lower_prob <- 1 / (1 + exp(-lower_log_odds))
+upper_prob <- 1 / (1 + exp(-upper_log_odds))
+
+cat("Probability of Expensive == 'Yes' when Sales = 1000: ", probability, "\n")
+cat("95% Confidence Interval for Probability: [", lower_prob, ", ", upper_prob, "]\n")
+```
+# TASK 6
+```{r}
+ChildCarSeats <- read.csv("data/ChildCarSeats.csv")
+
+# Boxplot for Price and CompPrice
+ggplot(ChildCarSeats, aes(x = factor(0), y = Price)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_boxplot(data = ChildCarSeats, aes(x = factor(1), y = CompPrice), fill = "lightgreen") +
+  scale_x_discrete(labels = c("Price", "CompPrice")) +
+  ylab("Price / CompPrice") +
+  theme_minimal()
+```
+
+```{r}
+# Wilcoxon signed-rank test to compare medians of 
+wilcox_test <- wilcox.test(ChildCarSeats$Price, ChildCarSeats$CompPrice, alternative = "less")
+print(wilcox_test)
+```
+```{r}
+cat("The p-value is very small (we reject the null hypothesis). Conclusion: the median of Price is significantly smaller than the median of CompPrice, as the boxplot also suggests.")
+```
+
